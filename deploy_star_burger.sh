@@ -20,9 +20,6 @@ fi
 log "==> Обновление кода из git"
 git pull
 
-log "==> Остановка контейнеров"
-docker compose down
-
 log "==> Сборка и запуск контейнеров"
 docker compose up --build -d
 
