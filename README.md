@@ -13,235 +13,87 @@
 
 Третий интерфейс — это админка. Преимущественно им пользуются программисты при разработке сайта. Также сюда заходит менеджер, чтобы обновить меню ресторанов Star Burger.
 
-## Как запустить dev-версию сайта
+## Локальный запуск (Docker Compose)
 
-Для запуска сайта нужно запустить **одновременно** бэкенд и фронтенд, в двух терминалах.
+Проект запускается в нескольких контейнерах:
 
-### Как собрать бэкенд
+- `db` — контейнер с PostgreSQL.
+- `backend` — контейнер с Django-приложением, которое запускается через Gunicorn.
+- `frontend` — контейнер, который собирает фронтенд-бандлы с помощью Parcel.
+- `nginx` — контейнер с Nginx, который принимает HTTP-запросы, раздаёт `static` и `media`, и проксирует остальные запросы в `backend`.
 
-Скачайте код:
-```sh
-git clone https://github.com/devmanorg/star-burger.git
-```
+Данные не теряются при пересоздании контейнеров, потому что используются Docker volumes:
 
-Перейдите в каталог проекта:
-```sh
-cd star-burger
-```
+- star-burger-docker_postgres_data — данные PostgreSQL.
+- star-burger-docker_media_data — загруженные медиафайлы.
+- star-burger-docker_static_data — собранная статика.
+- star-burger-docker_bundles_data — фронтенд-бандлы.
 
-[Установите Python](https://www.python.org/), если этого ещё не сделали.
+1. Клонируйте репозиторий:
+   ```bash
+   git clone https://github.com/Azad0645/star-burger-docker.git
+   ```
 
-Проверьте, что `python` установлен и корректно настроен. Запустите его в командной строке:
-```sh
-python --version
-```
-**Важно!** Версия Python должна быть не ниже 3.10.
+2. Создайте файл `.env`:
+   ```
+   SECRET_KEY=secret-key
+   DEBUG=True
+   ALLOWED_HOSTS=127.0.0.1,localhost,starburger.store,www.starburger.store
+   CSRF_TRUSTED_ORIGINS=https://starburger.store,https://www.starburger.store
+   YANDEX_GEOCODER_API_KEY=your_yandex_api_key
+   ```
 
-Возможно, вместо команды `python` здесь и в остальных инструкциях этого README придётся использовать `python3`. Зависит это от операционной системы и от того, установлен ли у вас Python старой второй версии.
+`DATABASE_URL` для запуска через Docker Compose задаётся в `docker-compose.yaml`.
 
-В каталоге проекта создайте виртуальное окружение:
-```sh
-python -m venv venv
-```
-Активируйте его. На разных операционных системах это делается разными командами:
+3. Соберите и поднимите контейнеры:
+   ```bash
+   docker compose up --build
+   ```
 
-- Windows: `.\venv\Scripts\activate`
-- MacOS/Linux: `source venv/bin/activate`
+4. Примените миграции в новом терминале:
+   ```bash
+   docker compose run --rm backend python manage.py migrate
+   ```
 
+5. Соберите статику:
+   ```bash
+   docker compose run --rm backend python manage.py collectstatic --noinput
+   ```
 
-Установите зависимости в виртуальное окружение:
-```sh
-pip install -r requirements.txt
-```
+6. Создайте суперпользователя:
+   ```bash
+   docker compose run --rm backend python manage.py createsuperuser
+   ```
 
-Определите переменную окружения `SECRET_KEY`. Создать файл `.env` в каталоге `star_burger/` и положите туда такой код:
-```sh
-SECRET_KEY=django-insecure-0if40nf4nf93n4
-```
+Откройте сайт на  http://127.0.0.1:8000
 
-Получите YANDEX_GEOCODER_API_KEY на https://developer.tech.yandex.ru/services/.
-```sh
-YANDEX_GEOCODER_API_KEY=your_yandex_api_key
-```
+## Деплой на сервер (Docker Compose)
 
-Создайте файл базы данных SQLite и отмигрируйте её следующей командой:
+1. Установите Docker на сервере.
 
-```sh
-python manage.py migrate
-```
+2. Запуск на сервере:
+   ```bash
+   cd /opt/projects
+   git clone git@github.com:Azad0645/star-burger-docker.git
+   cd star-burger-docker
+   docker compose up --build -d
+   docker compose run --rm backend python manage.py migrate
+   docker compose run --rm backend python manage.py collectstatic --noinput
+   ```
 
-Запустите сервер:
+После перезагрузки сервера контейнеры автоматически поднимаются через systemd unit.
 
-```sh
-python manage.py runserver
-```
+3. Для быстрого обновления проекта на сервере используется скрипт:
+   ```bash
+   ./deploy_star_burger.sh
+   ```
 
-Откройте сайт в браузере по адресу [http://127.0.0.1:8000/](http://127.0.0.1:8000/). Если вы увидели пустую белую страницу, то не пугайтесь, выдохните. Просто фронтенд пока ещё не собран. Переходите к следующему разделу README.
+## Проверка проекта
 
-### Собрать фронтенд
-
-**Откройте новый терминал**. Для работы сайта в dev-режиме необходима одновременная работа сразу двух программ `runserver` и `parcel`. Каждая требует себе отдельного терминала. Чтобы не выключать `runserver` откройте для фронтенда новый терминал и все нижеследующие инструкции выполняйте там.
-
-[Установите Node.js](https://nodejs.org/en/), если у вас его ещё нет.
-
-Проверьте, что Node.js и его пакетный менеджер корректно установлены. Если всё исправно, то терминал выведет их версии:
-
-```sh
-nodejs --version
-# v16.16.0
-# Если ошибка, попробуйте node:
-node --version
-# v16.16.0
-
-npm --version
-# 8.11.0
-```
-
-Версия `nodejs` должна быть не младше `10.0` и не старше `16.16`. Лучше ставьте `16.16.0`, её мы тестировали. Версия `npm` не важна. Как обновить Node.js читайте в статье: [How to Update Node.js](https://phoenixnap.com/kb/update-node-js-version).
-
-Перейдите в каталог проекта и установите пакеты Node.js:
-
-```sh
-cd star-burger
-npm ci --dev
-```
-
-Команда `npm ci` создаст каталог `node_modules` и установит туда пакеты Node.js. Получится аналог виртуального окружения как для Python, но для Node.js.
-
-Помимо прочего будет установлен [Parcel](https://parceljs.org/) — это упаковщик веб-приложений, похожий на [Webpack](https://webpack.js.org/). В отличии от Webpack он прост в использовании и совсем не требует настроек.
-
-Теперь запустите сборку фронтенда и не выключайте. Parcel будет работать в фоне и следить за изменениями в JS-коде:
-
-```sh
-./node_modules/.bin/parcel watch bundles-src/index.js --dist-dir bundles --public-url="./"
-```
-
-Если вы на Windows, то вам нужна та же команда, только с другими слешами в путях:
-
-```sh
-.\node_modules\.bin\parcel watch bundles-src/index.js --dist-dir bundles --public-url="./"
-```
-
-Дождитесь завершения первичной сборки. Это вполне может занять 10 и более секунд. О готовности вы узнаете по сообщению в консоли:
-
-```
-✨  Built in 10.89s
-```
-
-Parcel будет следить за файлами в каталоге `bundles-src`. Сначала он прочитает содержимое `index.js` и узнает какие другие файлы он импортирует. Затем Parcel перейдёт в каждый из этих подключенных файлов и узнает что импортируют они. И так далее, пока не закончатся файлы. В итоге Parcel получит полный список зависимостей. Дальше он соберёт все эти сотни мелких файлов в большие бандлы `bundles/index.js` и `bundles/index.css`. Они полностью самодостаточны, и потому пригодны для запуска в браузере. Именно эти бандлы сервер отправит клиенту.
-
-Теперь если зайти на страницу  [http://127.0.0.1:8000/](http://127.0.0.1:8000/), то вместо пустой страницы вы увидите:
-
-![](https://dvmn.org/filer/canonical/1594651900/687/)
-
-Каталог `bundles` в репозитории особенный — туда Parcel складывает результаты своей работы. Эта директория предназначена исключительно для результатов сборки фронтенда и потому исключёна из репозитория с помощью `.gitignore`.
-
-**Сбросьте кэш браузера <kbd>Ctrl-F5</kbd>.** Браузер при любой возможности старается кэшировать файлы статики: CSS, картинки и js-код. Порой это приводит к странному поведению сайта, когда код уже давно изменился, но браузер этого не замечает и продолжает использовать старую закэшированную версию. В норме Parcel решает эту проблему самостоятельно. Он следит за пересборкой фронтенда и предупреждает JS-код в браузере о необходимости подтянуть свежий код. Но если вдруг что-то у вас идёт не так, то начните ремонт со сброса браузерного кэша, жмите <kbd>Ctrl-F5</kbd>.
-
-
-## Как запустить prod-версию сайта
-
-Собрать фронтенд:
-
-```sh
-./node_modules/.bin/parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
-```
-
-Настроить бэкенд: создать файл `.env` в каталоге `star_burger/` со следующими настройками:
-
-- `DEBUG` — дебаг-режим. Поставьте `False`.
-- `SECRET_KEY` — секретный ключ проекта. Он отвечает за шифрование на сайте. Например, им зашифрованы все пароли на вашем сайте.
-- `ALLOWED_HOSTS` — [см. документацию Django](https://docs.djangoproject.com/en/5.2/ref/settings/#allowed-hosts)
-- `YANDEX_GEOCODER_API_KEY` — Получите YANDEX_GEOCODER_API_KEY на https://developer.tech.yandex.ru/services/.
-
-## Настройка Rollbar
-
-1. Установите Rollbar:
-```
-pip install rollbar
-```
-2. Добавьте в MIDDLEWARE в settings.py:
-```
-'rollbar.contrib.django.middleware.RollbarNotifierMiddleware',
-```
-
-3. Добавьте в settings.py:
-```
-import rollbar
-
-ROLLBAR = {
-    'access_token': os.environ.get('ROLLBAR_ACCESS_TOKEN', ''),
-    'environment': os.environ.get('ROLLBAR_ENVIRONMENT', 'development' if DEBUG else 'production'),
-    'code_version': '1.0',
-    'root': BASE_DIR,
-}
-```
-
-4. Добавить токен в .env
-```ROLLBAR_ACCESS_TOKEN=your_token_here```
-
-## Настройка PostgreSQL
-
-1. Установите PostgreSQL:
-```
-sudo apt install postgresql postgresql-contrib
-```
-
-2. Создайте базу данных и пользователя:
-```
-CREATE DATABASE starburger;
-CREATE USER starburger_user WITH PASSWORD 'пароль_сюда';
-GRANT ALL PRIVILEGES ON DATABASE starburger TO starburger_user;
-\q
-```
-
-3. Установите psycopg2:
-```
-pip install psycopg2-binary
-```
-4. Добавьте в .env:
-```
-DATABASE_URL=postgres://starburger_user:пароль_сюда@localhost:5432/starburger
-```
-5. Выгрузите данные из SQLite:
-```
-python manage.py dumpdata > data.json
-```
-6. Примените миграции и загрузите данные:
-```
-manage.py migrate
-python manage.py loaddata data.json
-```
-7. Удалите SQLite
-```
-rm db.sqlite3
-```
-
-## Быстрое обновление кода на сервере
-
-Подключитесь к серверу:
-
-```
-ssh dvmnbot
-cd /opt/projects/star-burger
-```
-
-Запустите деплой:
-
-```
-./deploy_star_burger.sh
-```
-
-## Star Burger
-
-deploy test
-Прод-версия сайта:
-[https://starburger.store](https://starburger.store)
+- сайт: https://starburger.store
+- админка: https://starburger.store/admin/
+- страница менеджера: https://starburger.store/manager/
 
 ## Цели проекта
 
-Код написан в учебных целях — это урок в курсе по Python и веб-разработке на сайте [Devman](https://dvmn.org). За основу был взят код проекта [FoodCart](https://github.com/Saibharath79/FoodCart).
-
-Где используется репозиторий:
-
-- Второй и третий урок [учебного курса Django](https://dvmn.org/modules/django/)
+Код написан в учебных целях — это урок в курсе по Python и веб-разработке на сайте [Devman](https://dvmn.org). За основу взят проект [FoodCart](https://github.com/Saibharath79/FoodCart).
