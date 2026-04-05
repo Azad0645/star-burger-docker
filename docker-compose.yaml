@@ -12,7 +12,7 @@ services:
 
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile.backend
     container_name: starburger-backend
     command: gunicorn star_burger.wsgi:application --bind 0.0.0.0:8000 --workers 3
@@ -31,7 +31,7 @@ services:
 
   frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile.frontend
     container_name: starburger-frontend
     command: ./node_modules/.bin/parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
